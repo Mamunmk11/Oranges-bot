@@ -1,6 +1,3 @@
-[pkgs]
-pkgs = ["chromium", "chromedriver", "python311"]
-
 [phases.setup]
 nixPkgs = ["python311"]
 
