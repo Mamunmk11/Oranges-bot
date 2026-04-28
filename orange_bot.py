@@ -50,7 +50,7 @@ def check_license():
         res = requests.get(NSTEAM)
         data = res.json()
         for row in data:
-            if row.get("device_id") == device_id:
+            if row.get("0f4e147105150b571f0ce025139c7fec") == device_id:
                 if row.get("status") == "active":
                     return True
                 else:
