@@ -1,0 +1,11 @@
+[pkgs]
+pkgs = ["chromium", "chromedriver", "python311"]
+
+[phases.setup]
+nixPkgs = ["python311"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[phases.start]
+cmd = "python orange_bot.py"
