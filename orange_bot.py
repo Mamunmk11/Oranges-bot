@@ -9,7 +9,7 @@ import random
 import datetime
 from datetime import timedelta
 
-# ডাটা ফোল্ডার তৈরি
+# Create data directory
 DATA_DIR = os.path.join(os.getcwd(), "data")
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
@@ -19,7 +19,7 @@ ADMIN_ID = 948283424
 BOT_TOKEN = "8745794978:AAG_1qbHtf6umupdJnTorFI_W63Jr3K6VU8"
 ADMIN_USERNAME = "@Rana1132"
 
-# ডাটাবেস ফাংশন
+# Database functions
 def load_users():
     if not os.path.exists(USER_DB):
         return {}
@@ -65,15 +65,11 @@ def remove_user(user_id):
         return True
     return False
 
-# Telegram বট
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-
-# স্ক্যানার ডাটা
+# Scanner data
 scan_data = []
 
 def scanner():
-    print("🔄 Scanner started...")
+    print("Scanner thread started...")
     ranges = ["88017", "88018", "88019", "88015", "88016", "88013", "88014", "Bangladesh"]
     while True:
         try:
@@ -83,13 +79,21 @@ def scanner():
                     'time': datetime.datetime.now(),
                     'cli': f"01{random.randint(10000000, 99999999)}"
                 })
-            # পুরাতন ডাটা ডিলিট (10 মিনিট)
+            # Clean old data (keep last 10 minutes)
             cutoff = datetime.datetime.now() - timedelta(minutes=10)
             global scan_data
             scan_data = [d for d in scan_data if d['time'] > cutoff]
             time.sleep(15)
-        except:
+        except Exception as e:
+            print(f"Scanner error: {e}")
             time.sleep(30)
+
+# Telegram imports
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+
+# User states
+user_states = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -97,88 +101,85 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if user_id == ADMIN_ID:
         keyboard = [
-            [KeyboardButton("🔴 Live Range")],
-            [KeyboardButton("➕ Add User"), KeyboardButton("➖ Remove User")],
-            [KeyboardButton("📋 User List"), KeyboardButton("👤 My Info")]
+            [KeyboardButton("Live Range")],
+            [KeyboardButton("Add User"), KeyboardButton("Remove User")],
+            [KeyboardButton("User List"), KeyboardButton("My Info")]
         ]
     elif is_premium:
         keyboard = [
-            [KeyboardButton("🔴 Live Range")],
-            [KeyboardButton("👤 My Info"), KeyboardButton("📞 Contact Admin")]
+            [KeyboardButton("Live Range")],
+            [KeyboardButton("My Info"), KeyboardButton("Contact Admin")]
         ]
     else:
         keyboard = [
-            [KeyboardButton("🔓 Upgrade")],
-            [KeyboardButton("👤 My Info"), KeyboardButton("📞 Contact Admin")]
+            [KeyboardButton("Upgrade")],
+            [KeyboardButton("My Info"), KeyboardButton("Contact Admin")]
         ]
     
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text(f"👋 Welcome! Status: {status}", reply_markup=reply_markup)
-
-# ইউজার স্টেট
-user_states = {}
+    await update.message.reply_text(f"Welcome! Status: {status}", reply_markup=reply_markup)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text
     
-    # ওয়েটিং ফর ইনপুট
+    # Check if waiting for input
     if user_id in user_states:
         state = user_states[user_id]
         if state == "wait_add" and text.isdigit():
             target = int(text)
             expiry = add_user(target)
-            await update.message.reply_text(f"✅ User {target} added! Expires: {expiry}")
+            await update.message.reply_text(f"User {target} added! Expires: {expiry}")
             del user_states[user_id]
             return
         elif state == "wait_remove" and text.isdigit():
             target = int(text)
             if remove_user(target):
-                await update.message.reply_text(f"✅ User {target} removed!")
+                await update.message.reply_text(f"User {target} removed!")
             else:
-                await update.message.reply_text("❌ User not found")
+                await update.message.reply_text("User not found")
             del user_states[user_id]
             return
         else:
-            await update.message.reply_text("❌ Send a valid numeric ID")
+            await update.message.reply_text("Send a valid numeric ID")
             del user_states[user_id]
             return
     
-    # এডমিন কমান্ড
+    # Admin commands
     if user_id == ADMIN_ID:
-        if text == "➕ Add User":
+        if text == "Add User":
             user_states[user_id] = "wait_add"
             await update.message.reply_text("Send User ID to ADD:")
             return
-        elif text == "➖ Remove User":
+        elif text == "Remove User":
             user_states[user_id] = "wait_remove"
             await update.message.reply_text("Send User ID to REMOVE:")
             return
-        elif text == "📋 User List":
+        elif text == "User List":
             users = load_users()
             if not users:
                 await update.message.reply_text("No users found")
             else:
-                msg = "📋 **User List:**\n\n"
+                msg = "User List:\n\n"
                 for uid, exp in list(users.items())[:20]:
-                    msg += f"🆔 {uid}\n📅 {exp}\n\n"
-                await update.message.reply_text(msg, parse_mode='Markdown')
+                    msg += f"ID: {uid}\nExpires: {exp}\n\n"
+                await update.message.reply_text(msg)
             return
     
-    # চেক সাবস্ক্রিপশন
+    # Check subscription
     is_premium, status = check_user(user_id)
     
-    # লাইভ রেঞ্জ
-    if text == "🔴 Live Range":
+    # Live Range
+    if text == "Live Range":
         if not is_premium and user_id != ADMIN_ID:
-            await update.message.reply_text("🚫 Premium feature! Type /start to upgrade")
+            await update.message.reply_text("Premium feature! Type /start to upgrade")
             return
         
         if not scan_data:
-            await update.message.reply_text("⚠️ Scanning data, please wait...")
+            await update.message.reply_text("Scanning data, please wait...")
             return
         
-        # লেটেস্ট ডাটা (লাস্ট ৫ মিনিট)
+        # Get last 5 minutes data
         cutoff = datetime.datetime.now() - timedelta(minutes=5)
         recent = [d for d in scan_data if d['time'] > cutoff]
         
@@ -190,59 +191,59 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not stats:
             await update.message.reply_text("No active ranges")
         else:
-            msg = "🔥 **Live Ranges:**\n\n"
+            msg = "Live Active Ranges:\n\n"
             for i, (rng, count) in enumerate(sorted(stats.items(), key=lambda x: x[1], reverse=True)[:10]):
                 msg += f"{i+1}. {rng} - {count} hits\n"
-            await update.message.reply_text(msg, parse_mode='Markdown')
+            await update.message.reply_text(msg)
         return
     
-    # আপগ্রেড
-    if text == "🔓 Upgrade":
-        msg = """💎 **PREMIUM UPGRADE**
+    # Upgrade
+    if text == "Upgrade":
+        msg = """PREMIUM UPGRADE
 
-💰 Price: 130 BDT / 1 USD per month
+Price: 130 BDT / 1 USD per month
 
-💳 Payment Methods:
+Payment Methods:
 • bKash
-• Nagad  
+• Nagad
 • Binance
 
-📌 Send payment screenshot with last 3 digits
+Send payment screenshot with last 3 digits
 
 Contact: @Rana1132"""
-        await update.message.reply_text(msg, parse_mode='Markdown')
+        await update.message.reply_text(msg)
         return
     
-    # মাই ইনফো
-    if text == "👤 My Info":
-        await update.message.reply_text(f"🆔 ID: `{user_id}`\n📅 Status: {status}", parse_mode='Markdown')
+    # My Info
+    if text == "My Info":
+        await update.message.reply_text(f"ID: {user_id}\nStatus: {status}")
         return
     
-    # কন্টাক্ট
-    if text == "📞 Contact Admin":
-        await update.message.reply_text(f"📧 Contact: {ADMIN_USERNAME}", parse_mode='Markdown')
+    # Contact Admin
+    if text == "Contact Admin":
+        await update.message.reply_text(f"Contact: {ADMIN_USERNAME}")
         return
     
-    # ডিফল্ট
+    # Default
     await start(update, context)
 
 async def main():
-    print("="*40)
-    print("🤖 BOT STARTING ON RAILWAY")
-    print("="*40)
+    print("=" * 40)
+    print("BOT STARTING ON RAILWAY")
+    print("=" * 40)
     
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     await app.bot.delete_webhook(drop_pending_updates=True)
-    print("✅ Webhook cleared")
+    print("Webhook cleared")
     
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
     
-    print("✅ BOT IS RUNNING!")
+    print("BOT IS RUNNING!")
     
     # Keep running
     while True:
@@ -257,4 +258,6 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("🛑 Bot stopped")
+        print("Bot stopped")
+    except Exception as e:
+        print(f"Error: {e}")
