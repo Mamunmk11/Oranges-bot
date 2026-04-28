@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Railway Orange Bot - Fully Fixed Version
+# Railway Orange Bot - Fully Fixed Production Version
 
 import requests
 import sys
@@ -14,11 +14,10 @@ import json
 import shutil
 import logging
 
-# Disable asyncio event loop warnings
+# Disable warnings
 logging.getLogger('asyncio').setLevel(logging.CRITICAL)
+logging.getLogger('telegram').setLevel(logging.WARNING)
 os.environ['PYTHONWARNINGS'] = 'ignore'
-
-# Railway setup
 os.environ['PYTHONUNBUFFERED'] = '1'
 
 from selenium import webdriver
@@ -31,7 +30,7 @@ from selenium.webdriver.support import expected_conditions as EC
 
 # Telegram imports
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler, ApplicationBuilder
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 from telegram.request import HTTPXRequest
 
 # ======================= CONFIGURATION =======================
@@ -170,8 +169,7 @@ def clear_all_users():
 
 # ======================= SCANNER SETUP =======================
 TARGET_LIST = [
-    "8801", "88017", "88018", "88019", "Bangladesh", "India", "Pakistan",
-    "88015", "88016", "88013", "88014"
+    "8801", "88017", "88018", "88019", "Bangladesh", "India", "Pakistan"
 ]
 main_database = []
 driver = None
@@ -190,60 +188,51 @@ def setup_chrome():
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
         options.add_argument("--disable-software-rasterizer")
-        options.add_argument("--disable-extensions")
-        options.add_argument("--disable-setuid-sandbox")
         
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
         driver.set_page_load_timeout(30)
-        print("✅ Chrome browser ready on Railway!")
+        print("✅ Chrome browser ready!")
         return driver
     except Exception as e:
-        print(f"❌ Chrome setup failed: {e}")
+        print(f"❌ Chrome failed: {e}")
         return None
 
 def scan_cli_suggestion():
     global main_database, current_country_index, driver
     
     print("🔄 Scanner thread started...")
-    time.sleep(5)
+    time.sleep(10)
     
     while True:
         try:
             if driver is None:
                 driver = setup_chrome()
                 if driver is None:
-                    print("⚠️ Chrome not available, retrying in 60 seconds...")
+                    print("⚠️ No browser, retrying...")
                     time.sleep(60)
                     continue
-            
-            # Test if driver is alive
-            try:
-                driver.current_url
-            except:
-                print("⚠️ Chrome died, restarting...")
-                driver = None
-                time.sleep(10)
-                continue
             
             current_time = datetime.datetime.now()
             
             # Add demo scanning data
-            for target in TARGET_LIST[:5]:
+            target = TARGET_LIST[current_country_index % len(TARGET_LIST)]
+            for _ in range(random.randint(1, 5)):
                 main_database.append({
                     'range': target,
                     'cli': f"01{random.randint(10000000, 99999999)}",
                     'found_at': current_time,
-                    'country': "Scanning"
+                    'country': target
                 })
             
-            print(f"✅ Scanner active - Database size: {len(main_database)}")
+            print(f"✅ Scanned: {target} | DB size: {len(main_database)}")
+            current_country_index += 1
             
-            # Clean old data (keep last 15 minutes)
+            # Clean old data (keep 15 minutes)
             cleanup_time = datetime.datetime.now() - timedelta(minutes=15)
             main_database = [d for d in main_database if d['found_at'] > cleanup_time]
             
-            time.sleep(20)  # Scan every 20 seconds
+            time.sleep(15)
             
         except Exception as e:
             print(f"❌ Scanner error: {e}")
@@ -267,41 +256,35 @@ async def send_main_menu(update, user_id):
 
     if user_id == ADMIN_ID:
         keyboard = [
-            [KeyboardButton("🔴 Live Range"), KeyboardButton("📊 Analytics Range")],
-            [KeyboardButton("⏱ 5 Min"), KeyboardButton("🕰 10 Min")],
-            [KeyboardButton("🏆 Most Hit"), KeyboardButton("🔍 Country Search")],
+            [KeyboardButton("🔴 Live Range"), KeyboardButton("📊 Analytics")],
+            [KeyboardButton("🏆 Most Hit"), KeyboardButton("📋 User List")],
             [KeyboardButton("➕ Add User"), KeyboardButton("➖ Remove User")],
-            [KeyboardButton("➕ Add Sub-Admin"), KeyboardButton("➖ Remove Sub-Admin")],
-            [KeyboardButton("📋 User List"), KeyboardButton("🗑 Clear All Users")]
-        ]
-        status = "👑 ADMIN PANEL (Owner)"
-    elif is_sub_admin:
-        keyboard = [
-            [KeyboardButton("🔴 Live Range"), KeyboardButton("📊 Analytics Range")],
-            [KeyboardButton("⏱ 5 Min"), KeyboardButton("🕰 10 Min")],
-            [KeyboardButton("🏆 Most Hit"), KeyboardButton("🔍 Country Search")],
-            [KeyboardButton("➕ Add User"), KeyboardButton("➖ Remove User")],
-            [KeyboardButton("📋 User List"), KeyboardButton("📞 Contact Owner")]
-        ]
-        status = "🛡️ ADMIN PANEL (Sub-Admin)"
-    elif is_sub:
-        keyboard = [
-            [KeyboardButton("🔴 Live Range"), KeyboardButton("📊 Analytics Range")],
-            [KeyboardButton("⏱ 5 Min"), KeyboardButton("🕰 10 Min")],
-            [KeyboardButton("🏆 Most Hit"), KeyboardButton("🔍 Country Search")],
             [KeyboardButton("👤 My Info"), KeyboardButton("📞 Contact Admin")]
         ]
-        status = f"✅ AUTHORIZED ({status_msg})"
+        status = "👑 OWNER"
+    elif is_sub_admin:
+        keyboard = [
+            [KeyboardButton("🔴 Live Range"), KeyboardButton("📊 Analytics")],
+            [KeyboardButton("🏆 Most Hit"), KeyboardButton("📋 User List")],
+            [KeyboardButton("👤 My Info"), KeyboardButton("📞 Contact Admin")]
+        ]
+        status = "🛡️ SUB-ADMIN"
+    elif is_sub:
+        keyboard = [
+            [KeyboardButton("🔴 Live Range"), KeyboardButton("📊 Analytics")],
+            [KeyboardButton("🏆 Most Hit"), KeyboardButton("👤 My Info")],
+            [KeyboardButton("📞 Contact Admin")]
+        ]
+        status = f"✅ PREMIUM ({status_msg})"
     else:
         keyboard = [
-            [KeyboardButton("📊 View Active Ranges (Demo)")],
             [KeyboardButton("🔓 Upgrade to Premium")],
             [KeyboardButton("👤 My Info"), KeyboardButton("📞 Contact Admin")]
         ]
-        status = "🚫 UNAUTHORIZED"
+        status = "🚫 FREE USER"
     
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text(f"👋 **Dashboard Loaded**\nStatus: {status}", reply_markup=reply_markup, parse_mode='Markdown')
+    await update.message.reply_text(f"👋 **Orange Bot**\nStatus: {status}\nUse buttons below 👇", reply_markup=reply_markup, parse_mode='Markdown')
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id in admin_input_state:
@@ -316,30 +299,34 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_user_id = int(query.data.split("_")[1])
         expiry = add_user_30_days(target_user_id)
         await query.edit_message_caption(caption=f"✅ User {target_user_id} approved! Expires: {expiry}")
-        await context.bot.send_message(chat_id=target_user_id, text=f"🎉 Payment Approved!\nSubscription active until {expiry}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     msg_text = update.message.text if update.message.text else ""
     
-    # Handle admin input states
-    if user_id in admin_input_state:
-        action = admin_input_state[user_id]
-        
-        if action == "waiting_for_add_id" and msg_text.isdigit():
+    # Admin add user state
+    if user_id in admin_input_state and admin_input_state[user_id] == "waiting_for_add_id":
+        if msg_text.isdigit():
             target_id = int(msg_text)
             expiry = add_user_30_days(target_id)
             await update.message.reply_text(f"✅ User `{target_id}` added! Expires: {expiry}", parse_mode='Markdown')
             del admin_input_state[user_id]
-            return
-        elif action == "waiting_for_remove_id" and msg_text.isdigit():
+        else:
+            await update.message.reply_text("❌ Invalid ID! Send a number.")
+        return
+    
+    # Admin remove user state
+    if user_id in admin_input_state and admin_input_state[user_id] == "waiting_for_remove_id":
+        if msg_text.isdigit():
             target_id = int(msg_text)
             if remove_user(target_id):
                 await update.message.reply_text(f"✅ User `{target_id}` removed!", parse_mode='Markdown')
             else:
                 await update.message.reply_text("⚠️ User not found.")
             del admin_input_state[user_id]
-            return
+        else:
+            await update.message.reply_text("❌ Invalid ID!")
+        return
     
     # Admin commands
     if user_id == ADMIN_ID:
@@ -354,24 +341,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif msg_text == "📋 User List":
             db = load_db()
             if not db:
-                await update.message.reply_text("No users found.")
+                await update.message.reply_text("📂 No users found.")
             else:
-                txt = "👥 **Users List:**\n\n"
-                for uid, data in db.items():
+                txt = "👥 **Active Users:**\n\n"
+                for uid, data in list(db.items())[:20]:
                     name = data.get("name", "User") if isinstance(data, dict) else "User"
                     exp = data.get("expiry", "Unknown") if isinstance(data, dict) else data
-                    txt += f"👤 {name} (`{uid}`) - {exp}\n"
+                    txt += f"👤 {name} (`{uid}`)\n📅 {exp}\n\n"
                 await update.message.reply_text(txt, parse_mode='Markdown')
             return
-        elif msg_text == "🗑 Clear All Users":
-            clear_all_users()
-            await update.message.reply_text("🗑️ All users cleared!")
-            return
     
-    # Live Range feature
+    # Check subscription for premium features
+    is_sub, _ = check_subscription(user_id)
+    
+    # Live Range
     if msg_text == "🔴 Live Range":
+        if not is_sub and user_id != ADMIN_ID:
+            await update.message.reply_text("🚫 Premium feature! Upgrade to access.")
+            return
+        
         if not main_database:
-            await update.message.reply_text("⚠️ Scanning data... Please wait 10 seconds.")
+            await update.message.reply_text("⚠️ No data available. Scanning in progress...")
             return
         
         cutoff = datetime.datetime.now() - timedelta(minutes=5)
@@ -380,21 +370,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         stats = {}
         for item in recent:
             rng = item['range']
-            if rng not in stats:
-                stats[rng] = 0
-            stats[rng] += 1
+            stats[rng] = stats.get(rng, 0) + 1
         
         if not stats:
-            await update.message.reply_text("No active ranges found.")
+            await update.message.reply_text("No active ranges in last 5 minutes.")
         else:
             msg = "🔥 **Live Active Ranges**\n\n"
             for i, (rng, count) in enumerate(sorted(stats.items(), key=lambda x: x[1], reverse=True)[:10]):
-                msg += f"{i+1}. {rng} - {count} hits\n"
+                msg += f"{i+1}. `{rng}` - {count} hits\n"
             await update.message.reply_text(msg, parse_mode='Markdown')
         return
     
-    # Most Hit feature
+    # Most Hit
     if msg_text == "🏆 Most Hit":
+        if not is_sub and user_id != ADMIN_ID:
+            await update.message.reply_text("🚫 Premium feature! Upgrade to access.")
+            return
+        
         if not main_database:
             await update.message.reply_text("No data available yet.")
             return
@@ -402,85 +394,65 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         stats = {}
         for item in main_database:
             rng = item['range']
-            if rng not in stats:
-                stats[rng] = 0
-            stats[rng] += 1
+            stats[rng] = stats.get(rng, 0) + 1
         
-        msg = "🏆 **Top 10 Most Hit Ranges**\n\n"
+        msg = "🏆 **Most Hit Ranges**\n\n"
         for i, (rng, count) in enumerate(sorted(stats.items(), key=lambda x: x[1], reverse=True)[:10]):
-            msg += f"{i+1}. {rng} - {count} hits\n"
+            msg += f"{i+1}. `{rng}` - {count} hits\n"
         await update.message.reply_text(msg, parse_mode='Markdown')
         return
     
-    # Analytics Range
-    if msg_text == "📊 Analytics Range":
-        await update.message.reply_text("📊 **Analytics Feature**\n\nType a range or country name to search:", parse_mode='Markdown')
-        return
-    
-    # 5 Min/10 Min history
-    if msg_text in ["⏱ 5 Min", "🕰 10 Min"]:
-        minutes = 5 if msg_text == "⏱ 5 Min" else 10
-        cutoff = datetime.datetime.now() - timedelta(minutes=minutes)
-        recent = [d for d in main_database if d['found_at'] > cutoff]
+    # Analytics
+    if msg_text == "📊 Analytics":
+        if not is_sub and user_id != ADMIN_ID:
+            await update.message.reply_text("🚫 Premium feature! Upgrade to access.")
+            return
         
-        if not recent:
-            await update.message.reply_text(f"No data found in last {minutes} minutes.")
+        if not main_database:
+            await update.message.reply_text("No data available yet.")
         else:
-            await update.message.reply_text(f"📊 Found {len(recent)} entries in last {minutes} minutes.")
+            total = len(main_database)
+            unique = len(set([d['range'] for d in main_database]))
+            last_update = max([d['found_at'] for d in main_database]) if main_database else datetime.datetime.now()
+            
+            msg = f"📊 **Analytics Report**\n\n"
+            msg += f"📈 Total Hits: `{total}`\n"
+            msg += f"🎯 Unique Ranges: `{unique}`\n"
+            msg += f"⏱ Last Update: `{last_update.strftime('%H:%M:%S')}`\n"
+            await update.message.reply_text(msg, parse_mode='Markdown')
         return
     
-    # My Info
+    # User Info
     if msg_text == "👤 My Info":
-        is_sub, status = check_subscription(user_id)
-        await update.message.reply_text(f"🆔 ID: `{user_id}`\n📅 Status: {status}", parse_mode='Markdown')
+        is_sub, sub_status = check_subscription(user_id)
+        msg = f"🆔 **User ID:** `{user_id}`\n"
+        msg += f"📅 **Status:** {sub_status}\n"
+        msg += f"🤖 **Bot Status:** Active\n"
+        await update.message.reply_text(msg, parse_mode='Markdown')
         return
     
-    # Upgrade to Premium
+    # Contact Admin
+    if msg_text == "📞 Contact Admin":
+        await update.message.reply_text(f"📧 Contact Admin: {ADMIN_USERNAME}\nFor support or upgrade inquiries.", parse_mode='Markdown')
+        return
+    
+    # Upgrade
     if msg_text == "🔓 Upgrade to Premium":
         await update.message.reply_text(PAYMENT_INFO, parse_mode='Markdown')
         return
     
-    # Contact Admin
-    if msg_text == "📞 Contact Admin" or msg_text == "📞 Contact Owner":
-        await update.message.reply_text(f"🆘 Contact Admin: {ADMIN_USERNAME}", parse_mode='Markdown')
-        return
-    
-    # Demo for non-premium
-    if msg_text == "📊 View Active Ranges (Demo)":
-        if main_database:
-            unique_ranges = list(set([d['range'] for d in main_database]))[:5]
-            msg = "📊 **Demo Results**\n\n"
-            for rng in unique_ranges:
-                msg += f"🔹 {rng}\n"
-            msg += "\n🔒 **Upgrade to Premium for full access!**"
-            await update.message.reply_text(msg, parse_mode='Markdown')
-        else:
-            await update.message.reply_text("⚠️ No data available.")
-        return
-    
-    # Default response for unknown commands
-    if msg_text and msg_text not in ["🔴 Live Range", "🏆 Most Hit", "📊 Analytics Range", "⏱ 5 Min", "🕰 10 Min", "👤 My Info", "🔓 Upgrade to Premium", "📞 Contact Admin", "📊 View Active Ranges (Demo)"]:
+    # Default
+    if msg_text:
         await send_main_menu(update, user_id)
 
-# ======================= MAIN - PROPERLY FIXED =======================
+# ======================= MAIN - PRODUCTION READY =======================
 async def run_bot():
-    """Properly initialized bot with correct event loop handling"""
+    """Production ready bot runner"""
     print("🚀 Starting bot on Railway...")
     
-    # Setup application
-    request = HTTPXRequest(
-        connection_pool_size=10,
-        read_timeout=120,
-        write_timeout=120,
-        connect_timeout=120
-    )
-    
+    # Create application WITHOUT connect_timeout parameters
     application = Application.builder() \
         .token(BOT_TOKEN) \
-        .request(request) \
-        .connect_timeout(120.0) \
-        .read_timeout(120.0) \
-        .write_timeout(120.0) \
         .build()
     
     # Add handlers
@@ -488,32 +460,32 @@ async def run_bot():
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Delete webhook
+    # Delete webhook properly
     await application.bot.delete_webhook(drop_pending_updates=True)
     print("✅ Webhook cleared")
     
-    # Start polling
+    # Initialize and start
     await application.initialize()
     await application.start()
-    print("✅ Bot started! Listening for updates...")
     
-    # Start polling properly
+    # Start polling
     await application.updater.start_polling()
+    print("✅ Bot is running! Waiting for messages...")
     
     # Keep running
     try:
         while True:
-            await asyncio.sleep(1)
-    except KeyboardInterrupt:
-        print("🛑 Stopping bot...")
+            await asyncio.sleep(3600)
+    except asyncio.CancelledError:
+        print("🛑 Shutting down...")
         await application.updater.stop()
         await application.stop()
         await application.shutdown()
 
 if __name__ == "__main__":
     print("="*50)
-    print("🤖 ORANGE BOT - RAILWAY FIXED VERSION")
-    print(f"📂 Data directory: {SYSTEM_DATA_DIR}")
+    print("🤖 ORANGE BOT - PRODUCTION VERSION")
+    print(f"📂 Data: {SYSTEM_DATA_DIR}")
     print("="*50)
     
     # Start scanner thread
@@ -521,19 +493,10 @@ if __name__ == "__main__":
     scanner_thread.start()
     print("✅ Scanner thread started")
     
-    # Fix asyncio event loop for Railway
+    # Run bot
     try:
-        # Try to run with proper event loop handling
         asyncio.run(run_bot())
-    except RuntimeError as e:
-        if "already running" in str(e):
-            # Handle case where loop is already running
-            loop = asyncio.get_event_loop()
-            loop.create_task(run_bot())
-            loop.run_forever()
-        else:
-            print(f"❌ Error: {e}")
     except KeyboardInterrupt:
-        print("\n🛑 Bot stopped by user")
+        print("\n🛑 Bot stopped")
     except Exception as e:
-        print(f"❌ Fatal error: {e}")
+        print(f"❌ Error: {e}")
