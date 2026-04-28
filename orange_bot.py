@@ -2,7 +2,7 @@
 import sys
 import os
 
-# Force stdout to be unbuffered
+# Force unbuffered output for Railway logs
 sys.stdout.reconfigure(line_buffering=True)
 sys.stderr.reconfigure(line_buffering=True)
 
@@ -10,399 +10,282 @@ print("="*60)
 print("🤖 ORANGE CARRIER BOT STARTING...")
 print("="*60)
 
-import requests
-import time
-import datetime
-from datetime import timedelta
-import re
-import threading
-import random
-import asyncio
-import json
-import shutil
-import html
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
-from telegram.request import HTTPXRequest
+# Import required modules
+try:
+    import requests
+    print("✅ requests imported")
+except ImportError as e:
+    print(f"❌ requests import failed: {e}")
+    sys.exit(1)
 
-print("✅ All imports successful!")
+try:
+    import time
+    import datetime
+    import threading
+    import random
+    import json
+    from datetime import timedelta
+    print("✅ core modules imported")
+except ImportError as e:
+    print(f"❌ core modules import failed: {e}")
+    sys.exit(1)
 
-# ======================= ENVIRONMENT =======================
+try:
+    from selenium import webdriver
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    print("✅ selenium imported")
+except ImportError as e:
+    print(f"❌ selenium import failed: {e}")
+    sys.exit(1)
+
+try:
+    from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+    from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
+    from telegram.request import HTTPXRequest
+    print("✅ telegram imported")
+except ImportError as e:
+    print(f"❌ telegram import failed: {e}")
+    sys.exit(1)
+
+print("="*60)
+
+# ======================= CONFIGURATION =======================
 IS_RAILWAY = os.environ.get('RAILWAY_ENVIRONMENT') is not None
-print(f"🚀 Running on Railway: {IS_RAILWAY}")
-
-# ======================= CREDENTIALS =======================
+BOT_TOKEN = "8745794978:AAG_1qbHtf6umupdJnTorFI_W63Jr3K6VU8"
+ADMIN_ID = 948283424
 ORANGE_EMAIL = "mamun.mkk100@gmail.com"
 ORANGE_PASSWORD = "Ranakhan11325"
 
-# ======================= CONFIGURATION =======================
-BOT_TOKEN = "8745794978:AAG_1qbHtf6umupdJnTorFI_W63Jr3K6VU8"
-ADMIN_ID = 948283424
+print(f"🚀 Railway mode: {IS_RAILWAY}")
+print(f"🤖 Bot Token: {BOT_TOKEN[:10]}...")
+print(f"👑 Admin ID: {ADMIN_ID}")
 
-# DATA STORAGE
-SYSTEM_DATA_DIR = os.path.join(os.path.expanduser("~"), "orange_bot_data")
-os.makedirs(SYSTEM_DATA_DIR, exist_ok=True)
+# Data directory
+DATA_DIR = os.path.join(os.path.expanduser("~"), "orange_bot_data")
+os.makedirs(DATA_DIR, exist_ok=True)
+USER_DB_FILE = os.path.join(DATA_DIR, "users.json")
+print(f"📁 Data directory: {DATA_DIR}")
 
-USER_DB_FILE = os.path.join(SYSTEM_DATA_DIR, "subscription_db.json")
-db_lock = threading.Lock()
-
-# ======================= DATABASE =======================
-def load_db():
-    with db_lock:
-        if not os.path.exists(USER_DB_FILE):
-            return {}
-        try:
-            with open(USER_DB_FILE, "r") as f:
-                return json.load(f)
-        except:
-            return {}
-
-def save_db(data):
-    with db_lock:
-        try:
-            with open(USER_DB_FILE, "w") as f:
-                json.dump(data, f, indent=4)
-        except Exception as e:
-            print(f"⚠️ Save Error: {e}")
-
-def check_subscription(user_id):
-    if user_id == ADMIN_ID:
-        return True, "Owner"
-    db = load_db()
-    if str(user_id) in db:
-        return True, "Active"
-    return False, "Not Subscribed"
-
-# ======================= TARGET LIST =======================
-TARGET_LIST = [
-    "8801", "88017", "88018", "88019", "Bangladesh", "India", "Pakistan",
-    "1315", "1425", "1520", "1646", "2011", "2278", "2332", "2626", "2917", "3247",
-    "3365", "3375", "3376", "3378", "3462", "3511", "3516", "3598", "3706", "3737",
-    "3932", "3933", "3937", "4076", "4473", "4478", "4479", "4822", "4845", "4857",
-    "4873", "4878", "4915", "4968", "4983", "5324", "5591", "5715", "5730", "5732",
-    "7708", "7863", "8613", "8615", "8617", "8618", "8619", "9178", "9639", "9890",
-    "9899", "9981", "9989", "48459"
-]
-
-main_database = []
+# Global variables
 driver = None
-current_country_index = 0
+main_database = []
+current_index = 0
 bot_running = True
 
-# ======================= CHROME BROWSER =======================
+# Target list
+TARGET_LIST = [
+    "8801", "88017", "88018", "Bangladesh", "India", "Pakistan",
+    "1315", "1425", "1520", "1646", "2011", "2278", "2332", "2626",
+    "2917", "3247", "3365", "3375", "3376", "3378", "3462", "3511",
+    "3516", "3598", "3706", "3737", "3932", "3933", "3937", "4076",
+    "4473", "4478", "4479", "4822", "4845", "4857", "4873", "4878",
+    "4915", "4968", "4983", "5324", "5591", "5715", "5730", "5732",
+    "7708", "7863", "8613", "8615", "8617", "8618", "8619", "9178",
+    "9639", "9890", "9899", "9981", "9989", "48459"
+]
+print(f"✅ {len(TARGET_LIST)} targets loaded")
+
+# ======================= DATABASE FUNCTIONS =======================
+def load_users():
+    if not os.path.exists(USER_DB_FILE):
+        return {}
+    try:
+        with open(USER_DB_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_users(users):
+    try:
+        with open(USER_DB_FILE, 'w') as f:
+            json.dump(users, f, indent=4)
+    except Exception as e:
+        print(f"⚠️ Save error: {e}")
+
+def check_user(user_id):
+    if user_id == ADMIN_ID:
+        return True
+    users = load_users()
+    return str(user_id) in users
+
+# ======================= BROWSER FUNCTIONS =======================
 def start_browser():
     global driver
     print("🚀 Starting Chrome browser...")
+    
     options = Options()
+    options.add_argument('--headless=new')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--window-size=1920,1080')
     
     if IS_RAILWAY:
-        print("🖥️ Headless mode for Railway")
-        options.add_argument('--headless=new')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_argument('--disable-gpu')
-        options.add_argument('--window-size=1920,1080')
         options.binary_location = "/usr/bin/google-chrome"
-        
-        try:
-            service = Service(executable_path="/usr/local/bin/chromedriver")
-            driver = webdriver.Chrome(service=service, options=options)
-            print("✅ Chrome browser launched!")
-            return True
-        except Exception as e:
-            print(f"❌ Chrome launch failed: {e}")
-            driver = None
-            return False
+        service = Service(executable_path="/usr/local/bin/chromedriver")
     else:
-        options.add_argument('--start-maximized')
+        # For local Windows
         chromedriver_path = r"C:\Users\mamun\Desktop\chromedriver.exe"
-        if os.path.exists(chromedriver_path):
-            service = Service(chromedriver_path)
-            driver = webdriver.Chrome(service=service, options=options)
-            print("✅ Chrome browser launched on Local PC!")
-            return True
-        else:
-            print(f"❌ ChromeDriver not found")
-            driver = None
-            return False
-
-def auto_login_orange():
-    global driver
+        service = Service(chromedriver_path)
+    
     try:
-        print("🔐 Attempting auto-login...")
-        
-        # Go to login page
-        driver.get("https://www.orangecarrier.com/login")
-        time.sleep(5)
-        print(f"📍 Current URL: {driver.current_url}")
-        
-        # Try different selectors for email field
-        email_selectors = [
-            "//input[@type='email']",
-            "//input[@name='email']", 
-            "//input[@name='username']",
-            "//input[@id='email']",
-            "//input[@id='username']"
-        ]
-        
-        email_field = None
-        for selector in email_selectors:
-            try:
-                email_field = WebDriverWait(driver, 5).until(
-                    EC.presence_of_element_located((By.XPATH, selector))
-                )
-                print(f"✅ Found email field with selector: {selector}")
-                break
-            except:
-                continue
-        
-        if email_field:
-            email_field.clear()
-            email_field.send_keys(ORANGE_EMAIL)
-            print("✅ Email entered")
-            time.sleep(1)
-        else:
-            print("❌ Email field not found!")
-            return False
-        
-        # Password field selectors
-        password_selectors = [
-            "//input[@type='password']",
-            "//input[@name='password']",
-            "//input[@id='password']"
-        ]
-        
-        password_field = None
-        for selector in password_selectors:
-            try:
-                password_field = driver.find_element(By.XPATH, selector)
-                print(f"✅ Found password field with selector: {selector}")
-                break
-            except:
-                continue
-        
-        if password_field:
-            password_field.clear()
-            password_field.send_keys(ORANGE_PASSWORD)
-            print("✅ Password entered")
-            time.sleep(1)
-        else:
-            print("❌ Password field not found!")
-            return False
-        
-        # Login button
-        login_selectors = [
-            "//button[@type='submit']",
-            "//input[@type='submit']",
-            "//button[contains(text(), 'Login')]",
-            "//button[contains(text(), 'Sign in')]"
-        ]
-        
-        login_btn = None
-        for selector in login_selectors:
-            try:
-                login_btn = driver.find_element(By.XPATH, selector)
-                print(f"✅ Found login button with selector: {selector}")
-                break
-            except:
-                continue
-        
-        if login_btn:
-            login_btn.click()
-            print("✅ Login button clicked")
-            time.sleep(8)
-            
-            # Check if login successful
-            current_url = driver.current_url
-            if "dashboard" in current_url.lower() or "home" in current_url.lower():
-                print("✅ Login successful!")
-                return True
-            else:
-                print(f"⚠️ Login may have failed. Current URL: {current_url}")
-                return True  # Still return true to continue
-        else:
-            print("❌ Login button not found!")
-            return False
-            
+        driver = webdriver.Chrome(service=service, options=options)
+        print("✅ Chrome browser started!")
+        return True
     except Exception as e:
-        print(f"❌ Auto-login failed: {e}")
+        print(f"❌ Browser failed: {e}")
+        driver = None
         return False
 
-def scan_cli_suggestion():
-    global main_database, current_country_index, driver, bot_running
+def do_login():
+    global driver
+    try:
+        print("🔐 Logging in...")
+        driver.get("https://www.orangecarrier.com/login")
+        time.sleep(5)
+        
+        # Try to find email field
+        email = driver.find_element(By.CSS_SELECTOR, "input[type='email'], input[name='email']")
+        email.clear()
+        email.send_keys(ORANGE_EMAIL)
+        print("✅ Email entered")
+        time.sleep(1)
+        
+        # Find password field
+        password = driver.find_element(By.CSS_SELECTOR, "input[type='password']")
+        password.clear()
+        password.send_keys(ORANGE_PASSWORD)
+        print("✅ Password entered")
+        time.sleep(1)
+        
+        # Find and click login button
+        login_btn = driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+        login_btn.click()
+        print("✅ Login clicked")
+        time.sleep(5)
+        
+        return True
+    except Exception as e:
+        print(f"❌ Login failed: {e}")
+        return False
+
+def scanner_loop():
+    global driver, main_database, current_index, bot_running
     
-    print("🔄 Scanner thread started!")
+    print("🔄 Scanner thread started")
     
-    if driver is None:
-        if not start_browser():
-            print("❌ Browser failed to start!")
-            return
+    # Start browser and login
+    if not start_browser():
+        print("❌ Cannot start browser")
+        return
     
-    if not auto_login_orange():
-        print("⚠️ Login had issues, but continuing...")
+    if not do_login():
+        print("⚠️ Login issue, but continuing...")
     
-    print("🚀 Scanner Logic Started!")
+    print("🚀 Scanner running...")
     
     while bot_running:
         try:
-            # Go to CLI access page
+            # Go to CLI page
             driver.get("https://www.orangecarrier.com/services/cli/access")
             time.sleep(3)
             
             # Get target
-            if current_country_index >= len(TARGET_LIST):
-                current_country_index = 0
-            target = TARGET_LIST[current_country_index]
+            target = TARGET_LIST[current_index % len(TARGET_LIST)]
+            current_index += 1
             print(f"🔍 Scanning: {target}")
             
-            try:
-                # Find search box
-                search_box = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.ID, "CLI"))
-                )
-                search_box.clear()
-                search_box.send_keys(target)
-                
-                # Click search button
-                search_btn = driver.find_element(By.ID, "SearchBtn")
-                search_btn.click()
-                time.sleep(2)
-                
-                current_country_index += 1
-                print(f"✅ Scan complete for {target}")
-                
-            except Exception as e:
-                print(f"⚠️ Scan error: {e}")
-                driver.refresh()
-                time.sleep(2)
+            # Find and fill search box
+            search = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, "CLI"))
+            )
+            search.clear()
+            search.send_keys(target)
             
-            time.sleep(1)
+            # Click search
+            btn = driver.find_element(By.ID, "SearchBtn")
+            btn.click()
+            time.sleep(2)
+            
+            print(f"✅ Scanned: {target}")
             
         except Exception as e:
-            print(f"❌ Browser issue: {e}")
-            try:
-                driver.quit()
-            except:
-                pass
-            driver = None
-            if bot_running:
-                start_browser()
-                auto_login_orange()
+            print(f"⚠️ Scan error: {e}")
             time.sleep(5)
+            
+            # Try to recover
+            try:
+                driver.refresh()
+            except:
+                driver = None
+                start_browser()
+                do_login()
+        
+        time.sleep(1)
 
 # ======================= TELEGRAM BOT =======================
-async def send_main_menu(update, user_id):
-    is_sub, status_msg = check_subscription(user_id)
-    
-    if user_id == ADMIN_ID:
-        keyboard = [
-            [KeyboardButton("🔴 Live Range")],
-            [KeyboardButton("📊 Stats"), KeyboardButton("👤 My Info")]
-        ]
-        status = "👑 ADMIN"
-    elif is_sub:
-        keyboard = [
-            [KeyboardButton("🔴 Live Range")],
-            [KeyboardButton("👤 My Info")]
-        ]
-        status = f"✅ {status_msg}"
-    else:
-        keyboard = [
-            [KeyboardButton("📊 Live Demo")],
-            [KeyboardButton("👤 My Info")]
-        ]
-        status = "🚫 UNAUTHORIZED"
-    
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text(f"👋 Welcome!\nStatus: {status}", reply_markup=reply_markup)
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print(f"📨 Start from user: {update.effective_user.id}")
-    await send_main_menu(update, update.effective_user.id)
+    user_id = update.effective_user.id
+    print(f"📨 /start from {user_id}")
+    
+    if user_id == ADMIN_ID or check_user(user_id):
+        keyboard = [[KeyboardButton("🔴 Live Range")]]
+        reply = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text("👋 Welcome to Orange Bot!\nStatus: ✅ PREMIUM", reply_markup=reply)
+    else:
+        keyboard = [[KeyboardButton("📊 Demo")]]
+        reply = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await update.message.reply_text("👋 Welcome!\nStatus: ⚠️ DEMO MODE\nContact @Rana1132 for premium", reply_markup=reply)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    msg_text = update.message.text
+    text = update.message.text
+    print(f"📨 {user_id}: {text}")
     
-    print(f"📨 Message from {user_id}: {msg_text}")
-    
-    if msg_text == "🔴 Live Range":
-        await update.message.reply_text(f"📡 Live Ranges Found: {len(main_database)}")
-    elif msg_text == "📊 Stats":
-        await update.message.reply_text(f"📊 Total Scanned: {len(main_database)}")
-    elif msg_text == "👤 My Info":
-        is_sub, status = check_subscription(user_id)
-        await update.message.reply_text(f"🆔 ID: {user_id}\n📅 Status: {status}")
-    elif msg_text == "📊 Live Demo":
-        await update.message.reply_text(f"📡 Demo: {len(main_database)} ranges found")
+    if text == "🔴 Live Range":
+        count = len(main_database)
+        await update.message.reply_text(f"📡 Live Ranges Found: {count}")
+    elif text == "📊 Demo":
+        await update.message.reply_text(f"📊 Demo Stats: {len(main_database)} ranges")
     else:
-        await send_main_menu(update, user_id)
+        await update.message.reply_text("Send /start to see menu")
 
 # ======================= MAIN =======================
 if __name__ == "__main__":
     print("="*60)
-    print("🤖 ORANGE CARRIER BOT STARTING")
+    print("🚀 STARTING BOT...")
     print("="*60)
     
-    # Kill any existing bot instances (重要!)
-    print("🔄 Ensuring no other bot instances are running...")
-    
-    # Start scanner in background
-    print("🔄 Starting scanner thread...")
-    scanner_thread = threading.Thread(target=scan_cli_suggestion, daemon=True)
-    scanner_thread.start()
+    # Start scanner thread
+    print("Starting scanner thread...")
+    scan_thread = threading.Thread(target=scanner_loop, daemon=True)
+    scan_thread.start()
     print("✅ Scanner thread started")
     
-    time.sleep(3)
+    time.sleep(2)
     
-    # Setup Telegram bot with proper error handling
-    print("🤖 Starting Telegram bot...")
+    # Start Telegram bot
+    print("Starting Telegram bot...")
     
-    # Use a single request instance
-    request = HTTPXRequest(
-        connection_pool_size=1,  # Reduce to 1 to avoid conflicts
-        read_timeout=30,
-        write_timeout=30,
-        connect_timeout=30
-    )
-    
-    app = ApplicationBuilder() \
-        .token(BOT_TOKEN) \
-        .request(request) \
-        .connect_timeout(30) \
-        .read_timeout(30) \
-        .write_timeout(30) \
-        .build()
-    
-    # Add handlers
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("✅ Bot handlers configured")
     print("="*60)
-    print("🚀 Bot is running! Check Telegram: @Rana1132")
+    print("✅ BOT IS RUNNING!")
+    print("📱 Check: https://t.me/Updateotpnew_bot")
     print("="*60)
     
-    # Use run_polling with proper settings
+    # Clear any webhook conflicts
     try:
-        # Drop any pending updates to avoid conflicts
         app.bot.delete_webhook(drop_pending_updates=True)
         print("✅ Webhook cleared")
-        
-        # Start polling
-        app.run_polling(
-            allowed_updates=['message'],
-            drop_pending_updates=True,
-            stop_signals=None  # Prevents signal conflicts
-        )
-    except Exception as e:
-        print(f"❌ Bot error: {e}")
-        import traceback
-        traceback.print_exc()
-        time.sleep(10)
+    except:
+        pass
+    
+    # Start polling
+    app.run_polling(allowed_updates=['message'], drop_pending_updates=True)
